@@ -20,7 +20,7 @@
 |---|---|
 | `TSC_v10_Core.bas` | *(constants only)* |
 | `TSC_v10_Utils.bas` | *(shared helpers)* |
-| `TSC_v10_BidderAndLines.bas` | `AddBidder_v10`, `ReEnterScope_v10`, `AddScopeLine_v10`, `AddAlternate_v10` |
+| `TSC_v10_BidderAndLines.bas` | `AddBidder_v10`, `ReEnterScope_v10`, `AddScopeLine_v10`, `AddAlternate_v10`, `MoveExclusionsToBottom_v10` |
 | `TSC_v10_GenerateTradeTabs.bas` | `GenerateTradeTabs_v10` |
 | `TSC_v10_SortBidders.bas` | `SortBidders_ByBaseBid_v10`, `SortBidders_ByAdjustedBid_v10` |
 | `TSC_v10_Evaluation.bas` | `RefreshHighlights_v10` |
@@ -116,3 +116,31 @@ Only **INCLUDE** bidders with numeric values count toward the averages.
 | Light yellow (scope cell) | UNCONFIRMED — bidder not yet asked about this scope item |
 | Orange (scope cell) | Exclusion anomaly — this bidder excluded something ≥60% of others included |
 | Light red (entire row) | Exception / Exclusion line |
+
+---
+
+## Debugging
+
+### After every import
+`ALT+F11` → **Debug → Compile VBAProject**
+
+If anything is wrong (bad reference, typo, mismatched `End Sub`) this surfaces it immediately. Fix all errors before closing the editor.
+
+### Stepping through a macro
+1. In the VBA editor, click anywhere inside the sub you want to test
+2. Press **F8** to execute one line at a time (yellow highlight shows current line)
+3. Hover over any variable to see its current value in a tooltip
+4. **View → Immediate Window** (`CTRL+G`) — type `?variableName` and Enter to inspect mid-run, or add `Debug.Print someValue` to the code for tracing
+
+### If a macro errors mid-run
+Click **Debug** in the error dialog. The editor opens at the failing line. Check variable values, then trace backward.
+
+### Common symptoms
+
+| Symptom | Likely cause |
+|---|---|
+| "Sub or Function not defined" | A button is still assigned to an old `_v9_1` macro name — re-assign to `_v10` |
+| Highlights don't update on cell edit | `Workbook_SheetChange` snippet not yet added to `ThisWorkbook` |
+| Eval rows 14–16 blank | No bidders have numeric values in the Adjusted Base Bid row yet |
+| Orange anomaly never appears | Needs 2+ bidders where ≥60% include something one excludes |
+| Green highlight on wrong column after sort | Row 12 (Adj Base Bid) has a non-numeric value for that bidder |
