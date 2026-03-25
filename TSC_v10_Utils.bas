@@ -1,4 +1,4 @@
-Attribute VB_Name = "TSC_v9_1_Utils"
+Attribute VB_Name = "TSC_v10_Utils"
 Option Explicit
 
 Public Function SheetExists(ByVal wb As Workbook, ByVal name As String) As Boolean
@@ -95,7 +95,6 @@ Public Function NextBidderCol(ByVal ws As Worksheet) As Long
 End Function
 
 Public Function IsBidderColEmpty(ByVal ws As Worksheet, ByVal c As Long) As Boolean
-    ' User request: check 2-8 AND 11 for "empty enough"
     Dim r As Long
     For r = 2 To 8
         If Len(Trim$(CStr(ws.Cells(r, c).Value))) > 0 Then Exit Function

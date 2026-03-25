@@ -1,7 +1,7 @@
-Attribute VB_Name = "TSC_v9_1_GenerateTradeTabs"
+Attribute VB_Name = "TSC_v10_GenerateTradeTabs"
 Option Explicit
 
-Public Sub GenerateTradeTabs_v9_1()
+Public Sub GenerateTradeTabs_v10()
     Dim wb As Workbook: Set wb = ThisWorkbook
     If wb.ProtectStructure Then
         MsgBox "Workbook STRUCTURE is protected. Unprotect first.", vbExclamation
@@ -21,6 +21,9 @@ Public Sub GenerateTradeTabs_v9_1()
     ' Ensure anchors exist on template
     tpl.Range("B17").Value = KEY_ADD_SCOPE
     tpl.Range("B23").Value = KEY_ADD_ALT
+
+    ' Ensure evaluation row labels exist on template
+    WriteEvalLabels tpl
 
     Dim colTrade As Long, colCSI As Long, colShort As Long, colCreate As Long, colDefaults As Long
     colTrade = FindHeaderCol(cfg, "TradeName")
@@ -71,6 +74,7 @@ Public Sub GenerateTradeTabs_v9_1()
         If SheetExists(wb, desired) Then
             Set wsT = wb.Worksheets(desired)
             WriteIdentity wsT, tradeName, csi, jobTitle, estimator, bidDate, jobGsf, tradeSf
+            WriteEvalLabels wsT
             If overwriteDefaults = vbYes And Len(defaultsPipe) > 0 Then
                 ClearSeededScope wsT
                 SeedDefaultScope wsT, defaultsPipe
@@ -81,6 +85,7 @@ Public Sub GenerateTradeTabs_v9_1()
             Set wsT = wb.Worksheets(wb.Worksheets.Count)
             wsT.Name = desired
             WriteIdentity wsT, tradeName, csi, jobTitle, estimator, bidDate, jobGsf, tradeSf
+            WriteEvalLabels wsT
             If Len(defaultsPipe) > 0 Then SeedDefaultScope wsT, defaultsPipe
             created = created + 1
         End If
@@ -91,7 +96,7 @@ NextRow:
     Application.EnableEvents = True
     Application.ScreenUpdating = True
 
-    MsgBox "GenerateTradeTabs_v9_1 complete." & vbCrLf & "Created: " & created & vbCrLf & "Updated: " & updated, vbInformation
+    MsgBox "GenerateTradeTabs_v10 complete." & vbCrLf & "Created: " & created & vbCrLf & "Updated: " & updated, vbInformation
 End Sub
 
 Private Sub WriteIdentity(ByVal ws As Worksheet, ByVal tradeName As String, ByVal csi As String, _
@@ -106,6 +111,13 @@ Private Sub WriteIdentity(ByVal ws As Worksheet, ByVal tradeName As String, ByVa
     If Len(tradeSf) > 0 Then ws.Range(CELL_TRADE_SF).Value = tradeSf
 End Sub
 
+Private Sub WriteEvalLabels(ByVal ws As Worksheet)
+    ' Write evaluation row labels in col G (HDR) — safe to call repeatedly
+    ws.Cells(ROW_LOWEST_BIDDER, COL_HDR).Value = TXT_LBL_LOWEST
+    ws.Cells(ROW_AVG_BASE, COL_HDR).Value = TXT_LBL_AVG_BASE
+    ws.Cells(ROW_AVG_ADJ, COL_HDR).Value = TXT_LBL_AVG_ADJ
+End Sub
+
 Private Sub SeedDefaultScope(ByVal ws As Worksheet, ByVal defaultsPipe As String)
     Dim anchor As Long: anchor = FindRowKeyInColB(ws, KEY_ADD_SCOPE)
     If anchor = 0 Then anchor = 17: ws.Range("B17").Value = KEY_ADD_SCOPE
@@ -116,9 +128,8 @@ Private Sub SeedDefaultScope(ByVal ws As Worksheet, ByVal defaultsPipe As String
         Dim s As String: s = Trim$(items(i))
         If Len(s) > 0 Then
             ws.Rows(anchor).Insert Shift:=xlDown
-            ws.Cells(anchor, COL_LINE_NO).Value = ""  ' leave numbering to user
+            ws.Cells(anchor, COL_LINE_NO).Value = "SEED"
             ws.Cells(anchor, COL_DESC).Value = s
-            ws.Cells(anchor, 1).Value = "SEED"
             ws.Cells(anchor, COL_ADJ_FLAG).Value = "NO"
             anchor = anchor + 1
         End If
@@ -130,7 +141,7 @@ Private Sub ClearSeededScope(ByVal ws As Worksheet)
     If anchor = 0 Then Exit Sub
     Dim r As Long: r = anchor - 1
     Do While r >= 1
-        If UCase$(Trim$(CStr(ws.Cells(r, 1).Value))) = "SEED" Then
+        If UCase$(Trim$(CStr(ws.Cells(r, COL_LINE_NO).Value))) = "SEED" Then
             ws.Rows(r).Delete
             anchor = anchor - 1
             r = anchor - 1

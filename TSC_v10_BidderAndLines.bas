@@ -1,10 +1,10 @@
-Attribute VB_Name = "TSC_v9_1_BidderAndLines"
+Attribute VB_Name = "TSC_v10_BidderAndLines"
 Option Explicit
 
 ' =========================
 ' ADD BIDDER
 ' =========================
-Public Sub AddBidder_v9_1()
+Public Sub AddBidder_v10()
     Dim ws As Worksheet: Set ws = ActiveSheet
     If StrComp(ws.Name, SHEET_TEMPLATE, vbTextCompare) = 0 Then
         MsgBox "Use Add Bidder on a trade tab (not TradeTemplate).", vbExclamation
@@ -13,10 +13,10 @@ Public Sub AddBidder_v9_1()
 
     Dim newCol As Long: newCol = NextBidderCol(ws)
 
-    ' Copy formatting from the FIRST bidder column template (Column I) if available
+    ' Copy formatting from the first bidder column template (Column I)
     CopyBidderColFormat ws, COL_BIDDER_START, newCol
 
-    ' Set Wizard Action dropdown default INCLUDE
+    ' Set Wizard Action dropdown default to INCLUDE
     ws.Cells(ROW_WIZ_ACTION, newCol).Value = BIDDER_INCLUDE
     ApplyIncludeExcludeValidation ws, newCol
 
@@ -33,34 +33,46 @@ Public Sub AddBidder_v9_1()
     bb = Trim$(InputBox("Base Bid (can be 1234 or 1000+200):", "Add Bidder"))
     If Len(bb) > 0 Then WriteAmountOrFormula ws.Cells(ROW_BASE_BID, newCol), bb
 
-    ' Ask to re-enter scope after base bid
-    Dim goScope As VbMsgBoxResult
-    goScope = MsgBox("Re-enter Scope + Alternates for this bidder now?", vbYesNo + vbQuestion, "Add Bidder")
-    If goScope = vbYes Then
+    ' Offer to re-enter scope for this new bidder
+    If MsgBox("Re-enter Scope + Alternates for this bidder now?", vbYesNo + vbQuestion, "Add Bidder") = vbYes Then
         ReEnterScopeAndAlternates_ForCol ws, newCol
     End If
-End Sub
 
-Private Sub CopyBidderColFormat(ByVal ws As Worksheet, ByVal srcCol As Long, ByVal dstCol As Long)
-    If dstCol = srcCol Then Exit Sub
-    ws.Columns(srcCol).Copy
-    ws.Columns(dstCol).PasteSpecial xlPasteFormats
-    Application.CutCopyMode = False
-End Sub
-
-Private Sub ApplyIncludeExcludeValidation(ByVal ws As Worksheet, ByVal col As Long)
-    On Error Resume Next
-    With ws.Cells(ROW_WIZ_ACTION, col).Validation
-        .Delete
-        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=BIDDER_INCLUDE & "," & BIDDER_EXCLUDE
-        .IgnoreBlank = True
-        .InCellDropdown = True
-    End With
-    On Error GoTo 0
+    RefreshHighlights_v10
 End Sub
 
 ' =========================
-' RE-ENTER SCOPE + ALTS for a given bidder column (called by Add Bidder)
+' RE-ENTER SCOPE (button-assignable — uses active cell column)
+' =========================
+Public Sub ReEnterScope_v10()
+    Dim ws As Worksheet: Set ws = ActiveSheet
+    If StrComp(ws.Name, SHEET_TEMPLATE, vbTextCompare) = 0 Then
+        MsgBox "Run on a trade tab (not TradeTemplate).", vbExclamation
+        Exit Sub
+    End If
+
+    Dim col As Long: col = ActiveCell.Column
+    If col < COL_BIDDER_START Then
+        MsgBox "Select any cell in a bidder column first, then run this macro.", vbExclamation
+        Exit Sub
+    End If
+    If IsBidderColEmpty(ws, col) Then
+        MsgBox "No bidder data found in this column.", vbExclamation
+        Exit Sub
+    End If
+
+    Dim bidName As String: bidName = Trim$(CStr(ws.Cells(2, col).Value))
+    If Len(bidName) = 0 Then bidName = "Column " & ColLetter(col)
+
+    If MsgBox("Re-enter scope + alternates for:" & vbCrLf & bidName & "?", _
+              vbYesNo + vbQuestion, "Re-enter Scope") = vbNo Then Exit Sub
+
+    ReEnterScopeAndAlternates_ForCol ws, col
+    RefreshHighlights_v10
+End Sub
+
+' =========================
+' RE-ENTER SCOPE + ALTS for a given bidder column
 ' =========================
 Public Sub ReEnterScopeAndAlternates_ForCol(ByVal ws As Worksheet, ByVal bidderCol As Long)
     Dim scopeAnchor As Long: scopeAnchor = FindRowKeyInColB(ws, KEY_ADD_SCOPE)
@@ -71,15 +83,18 @@ Public Sub ReEnterScopeAndAlternates_ForCol(ByVal ws As Worksheet, ByVal bidderC
     Dim altLast As Long
     If altAnchor > 0 Then altLast = altAnchor - 1 Else altLast = 0
 
+    Dim bidName As String: bidName = Trim$(CStr(ws.Cells(2, bidderCol).Value))
+    If Len(bidName) = 0 Then bidName = "Column " & ColLetter(bidderCol)
+
     Dim r As Long
-    ' Scope prompts (default: Included/Excluded, then $)
-    For r = 17 To scopeLast
+    ' Scope prompts
+    For r = ROW_SCOPE_START To scopeLast
         Dim desc As String: desc = Trim$(CStr(ws.Cells(r, COL_DESC).Value))
         If Len(desc) = 0 Then GoTo NextScope
         If UCase$(desc) = UCase$(KEY_ADD_SCOPE) Then GoTo NextScope
 
         Dim resp As String
-        resp = Trim$(InputBox("Does this bidder include:" & vbCrLf & desc & vbCrLf & vbCrLf & _
+        resp = Trim$(InputBox(bidName & " — does this bidder include:" & vbCrLf & desc & vbCrLf & vbCrLf & _
                               "Type:" & vbCrLf & _
                               " I = Included" & vbCrLf & _
                               " E = Excluded" & vbCrLf & _
@@ -88,27 +103,31 @@ Public Sub ReEnterScopeAndAlternates_ForCol(ByVal ws As Worksheet, ByVal bidderC
         If StrPtr(resp) = 0 Then Exit Sub
         If resp = "" Then
             ws.Cells(r, bidderCol).Value = TXT_UNCONF
+            ws.Cells(r, bidderCol).Interior.Color = RGB_LIGHT_YELLOW
         ElseIf UCase$(resp) = "I" Then
             ws.Cells(r, bidderCol).Value = TXT_INCLUDED
+            ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
         ElseIf UCase$(resp) = "E" Then
             ws.Cells(r, bidderCol).Value = TXT_EXCLUDED
+            ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
         Else
-            ' $ or numeric/expression
             Dim amt As String
             amt = Trim$(InputBox("Enter amount (can be 1234 or 1000+200):" & vbCrLf & desc, "Amount"))
             If StrPtr(amt) = 0 Then Exit Sub
             If Len(amt) = 0 Then
                 ws.Cells(r, bidderCol).Value = TXT_UNCONF
+                ws.Cells(r, bidderCol).Interior.Color = RGB_LIGHT_YELLOW
             Else
                 WriteAmountOrFormula ws.Cells(r, bidderCol), amt
+                ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
             End If
         End If
 NextScope:
     Next r
 
-    ' Alternates prompts (default $)
+    ' Alternates prompts
     If altLast > 0 Then
-        For r = scopeAnchor + 3 To altLast ' skip header row and "Alt + Adjusted" rows are formula-driven
+        For r = scopeAnchor + 3 To altLast
             Dim aDesc As String: aDesc = Trim$(CStr(ws.Cells(r, COL_DESC).Value))
             If UCase$(Left$(aDesc, 9)) <> "ALTERNATE" Then GoTo NextAlt
 
@@ -126,9 +145,9 @@ NextAlt:
 End Sub
 
 ' =========================
-' ADD SCOPE LINE (normal or exception)
+' ADD SCOPE LINE
 ' =========================
-Public Sub AddScopeLine_v9_1()
+Public Sub AddScopeLine_v10()
     Dim ws As Worksheet: Set ws = ActiveSheet
     Dim anchor As Long: anchor = FindRowKeyInColB(ws, KEY_ADD_SCOPE)
     If anchor = 0 Then MsgBox "Can't find '" & KEY_ADD_SCOPE & "' in col B.", vbExclamation: Exit Sub
@@ -151,32 +170,41 @@ Public Sub AddScopeLine_v9_1()
         ws.Range(ws.Cells(anchor, 1), ws.Cells(anchor, COL_NOTES)).Interior.Color = RGB_LIGHT_RED
     End If
 
-    ' Prompt each existing bidder column (skippable -> UNCONFIRMED)
+    ' Prompt each existing bidder — show company name, not just column letter
     Dim lastCol As Long: lastCol = ws.Cells(ROW_WIZ_ACTION, ws.Columns.Count).End(xlToLeft).Column
     Dim c As Long
     For c = COL_BIDDER_START To lastCol
         If Not IsBidderColEmpty(ws, c) Then
+            Dim bidName As String: bidName = Trim$(CStr(ws.Cells(2, c).Value))
+            If Len(bidName) = 0 Then bidName = "Column " & ColLetter(c)
+
             Dim resp As String
-            resp = Trim$(InputBox("For bidder column " & ColLetter(c) & ":" & vbCrLf & _
-                                  "Enter $ amount OR type I/E OR leave blank to skip.", "Scope Entry"))
+            resp = Trim$(InputBox("For " & bidName & ":" & vbCrLf & _
+                                  "Enter $ amount OR type I / E OR leave blank to skip (marks Unconfirmed).", "Scope Entry"))
             If StrPtr(resp) = 0 Then Exit For
             If resp = "" Then
                 ws.Cells(anchor, c).Value = TXT_UNCONF
+                ws.Cells(anchor, c).Interior.Color = RGB_LIGHT_YELLOW
             ElseIf UCase$(resp) = "I" Then
                 ws.Cells(anchor, c).Value = TXT_INCLUDED
+                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
             ElseIf UCase$(resp) = "E" Then
                 ws.Cells(anchor, c).Value = TXT_EXCLUDED
+                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
             Else
                 WriteAmountOrFormula ws.Cells(anchor, c), resp
+                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
             End If
         End If
     Next c
+
+    RefreshHighlights_v10
 End Sub
 
 ' =========================
-' ADD ALTERNATE (adds 2 rows: Alternate n and Alt n + Adjusted)
+' ADD ALTERNATE
 ' =========================
-Public Sub AddAlternate_v9_1()
+Public Sub AddAlternate_v10()
     Dim ws As Worksheet: Set ws = ActiveSheet
     Dim anchor As Long: anchor = FindRowKeyInColB(ws, KEY_ADD_ALT)
     If anchor = 0 Then MsgBox "Can't find '" & KEY_ADD_ALT & "' in col B.", vbExclamation: Exit Sub
@@ -189,15 +217,37 @@ Public Sub AddAlternate_v9_1()
     ws.Cells(anchor, COL_DESC).Value = "Alternate " & n & ":"
     ws.Cells(anchor + 1, COL_DESC).Value = "Alternate " & n & " + Adjusted Base Bid"
 
-    ' For each bidder col: Alt+Adjusted formula = AdjBase + Alt
+    ' Write Alt+Adjusted formula for each bidder column
     Dim lastCol As Long: lastCol = ws.Cells(ROW_WIZ_ACTION, ws.Columns.Count).End(xlToLeft).Column
     Dim c As Long
     For c = COL_BUDGET To lastCol
-        ' Only apply where column is budget or an existing bidder
         If c = COL_BUDGET Or Not IsBidderColEmpty(ws, c) Then
             ws.Cells(anchor + 1, c).Formula = "=IFERROR(" & ws.Cells(ROW_ADJ_BASE, c).Address(False, False) & "+" & ws.Cells(anchor, c).Address(False, False) & ","""")"
         End If
     Next c
+
+    RefreshHighlights_v10
+End Sub
+
+' =========================
+' PRIVATE HELPERS
+' =========================
+Private Sub CopyBidderColFormat(ByVal ws As Worksheet, ByVal srcCol As Long, ByVal dstCol As Long)
+    If dstCol = srcCol Then Exit Sub
+    ws.Columns(srcCol).Copy
+    ws.Columns(dstCol).PasteSpecial xlPasteFormats
+    Application.CutCopyMode = False
+End Sub
+
+Private Sub ApplyIncludeExcludeValidation(ByVal ws As Worksheet, ByVal col As Long)
+    On Error Resume Next
+    With ws.Cells(ROW_WIZ_ACTION, col).Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:=xlBetween, Formula1:=BIDDER_INCLUDE & "," & BIDDER_EXCLUDE
+        .IgnoreBlank = True
+        .InCellDropdown = True
+    End With
+    On Error GoTo 0
 End Sub
 
 Private Function NextAlternateNumber(ByVal ws As Worksheet, ByVal altAnchor As Long) As Long
