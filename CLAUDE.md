@@ -24,16 +24,20 @@ database — it is a structured visual decision tool designed to:
 ## Repository File Structure
 
 ```
-TabSheetCreator_v10.xlsm   ← lives locally on user's device (not in repo)
-TSC_v10_Core.bas            ← constants (sheet names, row/col positions, colors)
-TSC_v10_Utils.bas           ← shared helpers (CSI normalization, anchor finders, etc.)
-TSC_v10_BidderAndLines.bas  ← scope, bidder, alternate, and exclusion macros
+TabSheetCreator_v10.xlsm    ← lives locally on user's device (not in repo)
+TSC_v10_Core.bas             ← constants (sheet names, row/col positions, colors)
+TSC_v10_Utils.bas            ← shared helpers (CSI normalization, anchor finders, etc.)
+TSC_v10_BidderAndLines.bas   ← scope, bidder, alternate, and exclusion macros
 TSC_v10_GenerateTradeTabs.bas ← tab generation from Config_CSI + toggle all create
-TSC_v10_SortBidders.bas     ← sort bidder columns by base or adjusted bid
-TSC_v10_Evaluation.bas      ← highlights, eval summary, anomaly detection
-TSC_v10_SanityCheck.bas     ← workbook integrity check
-README.md                   ← install instructions, color key, debugging guide
-CLAUDE.md                   ← this file
+TSC_v10_SortBidders.bas      ← sort bidder columns by base or adjusted bid
+TSC_v10_Evaluation.bas       ← highlights, eval summary, anomaly detection
+TSC_v10_SanityCheck.bas      ← workbook integrity check
+UF_AddBidder.frm             ← UserForm: add bidder (7 fields + scope checkbox)
+UF_ScopeType.frm             ← UserForm: choose Normal vs Exception/Exclusion scope type
+UF_ScopeEntry.frm            ← UserForm: I / E / $ / Unconfirmed scope response per bidder
+UF_JobInfo.frm               ← UserForm: job info + overwrite option (pre-fills from Config_CSI)
+README.md                    ← install instructions, color key, debugging guide
+CLAUDE.md                    ← this file
 ```
 
 ---
@@ -45,7 +49,7 @@ CLAUDE.md                   ← this file
 - `Config_CSI` — trade configuration table (headers: TradeName, CSI_Code, ShortName, Create, DefaultScopeLines)
 - `TradeTemplate` — master template copied when generating trade tabs
 
-**Generated trade tabs** — named `XX.XXXX SHORTNAME` (e.g., `03.3000 CONCRETE`)
+**Generated trade tabs** — named `XX.XX SHORTNAME` (e.g., `03.30 CONCRETE`). Cell C3 on each tab shows the full `XX.XXXX` code.
 
 **Temp sheets** (created and deleted automatically by macros):
 - `zz_tmpSort` — used by sort macros
@@ -80,16 +84,16 @@ CLAUDE.md                   ← this file
 ### TSC_v10_BidderAndLines.bas
 | Macro | Description |
 |---|---|
-| `AddBidder_v10` | Adds a new bidder column; prompts for company, contact, phone, email, date, notes, base bid; offers to re-enter scope |
+| `AddBidder_v10` | Adds a new bidder column via UF_AddBidder form (7 fields + scope checkbox); true Cancel = no changes |
 | `ReEnterScope_v10` | Re-walks scope + alternates for the bidder column containing the active cell; detects column automatically |
-| `AddScopeLine_v10` | Inserts a new scope line above the ADD SCOPE LINE anchor; prompts type (normal or exception/red); walks existing bidders by name for I/E/$/skip |
+| `AddScopeLine_v10` | Inserts a new scope line; UF_ScopeType chooses Normal vs Exception; UF_ScopeEntry prompts each bidder for I/E/$/skip |
 | `AddAlternate_v10` | Inserts two rows (Alternate N + Alternate N + Adjusted Base Bid) with auto-incrementing N; writes IFERROR formula for adjusted row |
 | `MoveExclusionsToBottom_v10` | Moves all exception/exclusion lines (light red rows) to the bottom of the scope section; normal lines keep relative order; uses temp sheet pattern |
 
 ### TSC_v10_GenerateTradeTabs.bas
 | Macro | Description |
 |---|---|
-| `GenerateTradeTabs_v10` | Reads Config_CSI, creates or updates trade tabs from template; prompts for job info; seeds default scope from pipe-delimited list |
+| `GenerateTradeTabs_v10` | Reads Config_CSI, creates or updates trade tabs; shows UF_JobInfo (pre-filled from Config_CSI G1:H4); saves project info back to Config_CSI; tab names use XX.XX (not XX.XXXX) |
 | `ToggleAllCreate_v10` | Toggles all checkboxes in the Create column of Config_CSI — if all checked → uncheck all; otherwise → check all |
 
 ### TSC_v10_SortBidders.bas
@@ -107,6 +111,31 @@ CLAUDE.md                   ← this file
 | Macro | Description |
 |---|---|
 | `SanityCheck_v10` | Checks for unexpected hidden sheets, missing Config_CSI, missing TradeTemplate; ignores zz_tmpSort |
+
+---
+
+## UserForms
+
+Four `.frm` files are importable alongside the `.bas` modules. Each has an explicit Cancel button that makes no changes.
+
+| Form | Used by | Purpose |
+|---|---|---|
+| `UF_AddBidder.frm` | `AddBidder_v10` | 7 header fields + scope checkbox. Shown before any cells are written — Cancel is a true no-op |
+| `UF_ScopeType.frm` | `AddScopeLine_v10` | Chooses Normal scope line or Exception/Exclusion (red row). Shown before the row is inserted — Cancel aborts |
+| `UF_ScopeEntry.frm` | `AddScopeLine_v10`, `ReEnterScopeAndAlternates_ForCol` | Per-bidder scope response: Included / Excluded / Dollar Amount / Unconfirmed-Skip. "Stop -- Done Entering" exits the loop |
+| `UF_JobInfo.frm` | `GenerateTradeTabs_v10` | Job info (pre-filled from Config_CSI) + overwrite option. Cancel exits before any tabs are generated |
+
+### Import order
+Import `.frm` files the same way as `.bas` files: VBA editor → File → Import File. Import forms before re-importing the `.bas` files that reference them. After import, run Debug → Compile VBAProject.
+
+### Config_CSI project info area
+`GenerateTradeTabs_v10` reads/writes project info to Config_CSI in columns G:H, rows 1–4:
+- G1 "Project Name" / H1 value
+- G2 "Estimator" / H2 value
+- G3 "Bid Date" / H3 value
+- G4 "Job GSF" / H4 value
+
+These cells are outside the trade data table (cols A–E). They persist between runs so UF_JobInfo pre-fills them automatically. Trade SF is NOT saved (it is per-run).
 
 ---
 
@@ -136,6 +165,9 @@ CLAUDE.md                   ← this file
 - [x] README with install steps, color key, debugging guide
 - [x] CLAUDE.md (this file)
 - [x] Workbook_SheetChange snippet for auto-highlights (documented in README, one-time paste into ThisWorkbook)
+- [x] Tab display name shortened to `XX.XX SHORTNAME`; cell C3 still shows full `XX.XXXX`
+- [x] Project info (Project Name, Estimator, Bid Date, Job GSF) saved to Config_CSI G1:H4; pre-fills on next run
+- [x] UserForms: UF_AddBidder, UF_ScopeType, UF_ScopeEntry, UF_JobInfo — all dialogs have explicit Cancel with no partial writes
 
 ---
 

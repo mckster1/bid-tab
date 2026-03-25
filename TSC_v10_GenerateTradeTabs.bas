@@ -18,13 +18,6 @@ Public Sub GenerateTradeTabs_v10()
         Exit Sub
     End If
 
-    ' Ensure anchors exist on template
-    tpl.Range("B17").Value = KEY_ADD_SCOPE
-    tpl.Range("B23").Value = KEY_ADD_ALT
-
-    ' Ensure evaluation row labels exist on template
-    WriteEvalLabels tpl
-
     Dim colTrade As Long, colCSI As Long, colShort As Long, colCreate As Long, colDefaults As Long
     colTrade = FindHeaderCol(cfg, "TradeName")
     colCSI = FindHeaderCol(cfg, "CSI_Code")
@@ -36,18 +29,35 @@ Public Sub GenerateTradeTabs_v10()
         Exit Sub
     End If
 
-    Dim overwriteDefaults As VbMsgBoxResult
-    overwriteDefaults = MsgBox("Overwrite default scope lines on existing tabs?" & vbCrLf & _
-                              "Yes = clear seeded + re-seed" & vbCrLf & _
-                              "No = seed only on NEW tabs", vbYesNoCancel + vbQuestion)
-    If overwriteDefaults = vbCancel Then Exit Sub
+    ' Read any previously saved project info from Config_CSI
+    Dim savedName As String: savedName = Trim$(CStr(cfg.Cells(CFG_PROJ_ROW_NAME, CFG_PROJ_VALUE_COL).Value))
+    Dim savedEst As String: savedEst = Trim$(CStr(cfg.Cells(CFG_PROJ_ROW_EST, CFG_PROJ_VALUE_COL).Value))
+    Dim savedDate As String: savedDate = Trim$(CStr(cfg.Cells(CFG_PROJ_ROW_DATE, CFG_PROJ_VALUE_COL).Value))
+    Dim savedGSF As String: savedGSF = Trim$(CStr(cfg.Cells(CFG_PROJ_ROW_GSF, CFG_PROJ_VALUE_COL).Value))
 
-    Dim jobTitle As String, estimator As String, bidDate As String, jobGsf As String, tradeSf As String
-    jobTitle = Trim$(InputBox("Job Title (" & CELL_JOBTITLE & "). Leave blank to skip.", "Setup – Job Info"))
-    estimator = Trim$(InputBox("Estimator (" & CELL_ESTIMATOR & "). Leave blank to skip.", "Setup – Job Info"))
-    bidDate = Trim$(InputBox("Bid Date (" & CELL_BIDDATE & "). Leave blank to skip.", "Setup – Job Info"))
-    jobGsf = Trim$(InputBox("Job GSF (" & CELL_JOB_GSF & "). Leave blank to skip.", "Setup – Job Info"))
-    tradeSf = Trim$(InputBox("Trade SF (" & CELL_TRADE_SF & "). Leave blank to skip.", "Setup – Job Info"))
+    ' Show job info form (pre-filled with saved values if any)
+    Dim frm As New UF_JobInfo
+    frm.Prefill savedName, savedEst, savedDate, savedGSF
+    frm.Show
+    If frm.Cancelled Then Unload frm: Set frm = Nothing: Exit Sub
+
+    Dim jobTitle As String: jobTitle = frm.ProjName
+    Dim estimator As String: estimator = frm.Estimator
+    Dim bidDate As String: bidDate = frm.BidDate
+    Dim jobGsf As String: jobGsf = frm.JobGSF
+    Dim tradeSf As String: tradeSf = frm.TradeSF
+    Dim overwriteDefaults As Long: overwriteDefaults = frm.OverwriteScope
+    Unload frm: Set frm = Nothing
+
+    ' Save project info back to Config_CSI for reuse on next run
+    WriteProjectInfoToConfig cfg, jobTitle, estimator, bidDate, jobGsf
+
+    ' Ensure anchors exist on template
+    tpl.Range("B17").Value = KEY_ADD_SCOPE
+    tpl.Range("B23").Value = KEY_ADD_ALT
+
+    ' Ensure evaluation row labels exist on template
+    WriteEvalLabels tpl
 
     Dim lastRow As Long: lastRow = cfg.Cells(cfg.Rows.Count, colTrade).End(xlUp).Row
     Dim r As Long, created As Long, updated As Long
@@ -66,16 +76,17 @@ Public Sub GenerateTradeTabs_v10()
         If Not IsTruthy(createFlag) Then GoTo NextRow
         If Len(Trim$(CStr(csiRaw))) = 0 Or Len(shortName) = 0 Then GoTo NextRow
 
-        Dim csi As String: csi = NormalizeCSI(csiRaw)
+        Dim csi As String: csi = NormalizeCSI(csiRaw)        ' full XX.XXXX — written to cell C3
+        Dim csiShort As String: csiShort = Left$(csi, 5)     ' XX.XX — used in tab name only
         Dim safeShort As String: safeShort = UCase$(SanitizeShortName(shortName))
-        Dim desired As String: desired = Left$(csi & " " & safeShort, 31)
+        Dim desired As String: desired = Left$(csiShort & " " & safeShort, 31)
 
         Dim wsT As Worksheet
         If SheetExists(wb, desired) Then
             Set wsT = wb.Worksheets(desired)
             WriteIdentity wsT, tradeName, csi, jobTitle, estimator, bidDate, jobGsf, tradeSf
             WriteEvalLabels wsT
-            If overwriteDefaults = vbYes And Len(defaultsPipe) > 0 Then
+            If overwriteDefaults = 1 And Len(defaultsPipe) > 0 Then
                 ClearSeededScope wsT
                 SeedDefaultScope wsT, defaultsPipe
             End If
@@ -99,11 +110,25 @@ NextRow:
     MsgBox "GenerateTradeTabs_v10 complete." & vbCrLf & "Created: " & created & vbCrLf & "Updated: " & updated, vbInformation
 End Sub
 
+' Save project info back to Config_CSI so it pre-fills on the next run
+Private Sub WriteProjectInfoToConfig(ByVal cfg As Worksheet, _
+                                     ByVal projName As String, ByVal estimator As String, _
+                                     ByVal bidDate As String, ByVal jobGsf As String)
+    cfg.Cells(CFG_PROJ_ROW_NAME, CFG_PROJ_LABEL_COL).Value = "Project Name"
+    cfg.Cells(CFG_PROJ_ROW_EST, CFG_PROJ_LABEL_COL).Value = "Estimator"
+    cfg.Cells(CFG_PROJ_ROW_DATE, CFG_PROJ_LABEL_COL).Value = "Bid Date"
+    cfg.Cells(CFG_PROJ_ROW_GSF, CFG_PROJ_LABEL_COL).Value = "Job GSF"
+    cfg.Cells(CFG_PROJ_ROW_NAME, CFG_PROJ_VALUE_COL).Value = projName
+    cfg.Cells(CFG_PROJ_ROW_EST, CFG_PROJ_VALUE_COL).Value = estimator
+    cfg.Cells(CFG_PROJ_ROW_DATE, CFG_PROJ_VALUE_COL).Value = bidDate
+    cfg.Cells(CFG_PROJ_ROW_GSF, CFG_PROJ_VALUE_COL).Value = jobGsf
+End Sub
+
 Private Sub WriteIdentity(ByVal ws As Worksheet, ByVal tradeName As String, ByVal csi As String, _
                           ByVal jobTitle As String, ByVal estimator As String, ByVal bidDate As String, _
                           ByVal jobGsf As String, ByVal tradeSf As String)
     ws.Range(CELL_TRADE_NAME).Value = tradeName
-    ws.Range(CELL_CSI).Value = csi
+    ws.Range(CELL_CSI).Value = csi          ' always writes full XX.XXXX to C3
     If Len(jobTitle) > 0 Then ws.Range(CELL_JOBTITLE).Value = jobTitle
     If Len(estimator) > 0 Then ws.Range(CELL_ESTIMATOR).Value = estimator
     If Len(bidDate) > 0 Then ws.Range(CELL_BIDDATE).Value = bidDate
@@ -155,8 +180,8 @@ End Sub
 ' TOGGLE ALL CREATE CHECKBOXES
 ' =========================
 ' Assigns to a single button on Config_CSI.
-' If all rows are checked (TRUE) → unchecks all.
-' If any row is unchecked → checks all.
+' If all rows are checked (TRUE) -> unchecks all.
+' If any row is unchecked -> checks all.
 Public Sub ToggleAllCreate_v10()
     Dim wb As Workbook: Set wb = ThisWorkbook
     Dim cfg As Worksheet
@@ -188,7 +213,7 @@ Public Sub ToggleAllCreate_v10()
         End If
     Next r
 
-    ' Toggle: if all checked → uncheck all; otherwise → check all
+    ' Toggle: if all checked -> uncheck all; otherwise -> check all
     Dim newValue As Boolean: newValue = Not allChecked
     For r = 2 To lastRow
         cfg.Cells(r, colCreate).Value2 = newValue

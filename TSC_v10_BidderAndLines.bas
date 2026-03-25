@@ -11,6 +11,11 @@ Public Sub AddBidder_v10()
         Exit Sub
     End If
 
+    ' Show form BEFORE writing any cells — true Cancel means no changes
+    Dim frm As New UF_AddBidder
+    frm.Show
+    If frm.Cancelled Then Unload frm: Set frm = Nothing: Exit Sub
+
     Dim newCol As Long: newCol = NextBidderCol(ws)
 
     ' Copy formatting from the first bidder column template (Column I)
@@ -20,23 +25,21 @@ Public Sub AddBidder_v10()
     ws.Cells(ROW_WIZ_ACTION, newCol).Value = BIDDER_INCLUDE
     ApplyIncludeExcludeValidation ws, newCol
 
-    ' Prompt header fields
-    ws.Cells(2, newCol).Value = Trim$(InputBox("Company name:", "Add Bidder"))
-    ws.Cells(3, newCol).Value = Trim$(InputBox("Contact:", "Add Bidder"))
-    ws.Cells(4, newCol).Value = Trim$(InputBox("Phone:", "Add Bidder"))
-    ws.Cells(5, newCol).Value = Trim$(InputBox("Email:", "Add Bidder"))
-    ws.Cells(6, newCol).Value = Trim$(InputBox("Date Received:", "Add Bidder"))
-    ws.Cells(7, newCol).Value = Trim$(InputBox("Notes:", "Add Bidder"))
+    ' Write header fields from form
+    ws.Cells(2, newCol).Value = frm.Company
+    ws.Cells(3, newCol).Value = frm.Contact
+    ws.Cells(4, newCol).Value = frm.Phone
+    ws.Cells(5, newCol).Value = frm.Email
+    ws.Cells(6, newCol).Value = frm.DateReceived
+    ws.Cells(7, newCol).Value = frm.Notes
 
     ' Base bid supports expressions like 1000+200
-    Dim bb As String
-    bb = Trim$(InputBox("Base Bid (can be 1234 or 1000+200):", "Add Bidder"))
-    If Len(bb) > 0 Then WriteAmountOrFormula ws.Cells(ROW_BASE_BID, newCol), bb
+    If Len(frm.BaseBid) > 0 Then WriteAmountOrFormula ws.Cells(ROW_BASE_BID, newCol), frm.BaseBid
 
-    ' Offer to re-enter scope for this new bidder
-    If MsgBox("Re-enter Scope + Alternates for this bidder now?", vbYesNo + vbQuestion, "Add Bidder") = vbYes Then
-        ReEnterScopeAndAlternates_ForCol ws, newCol
-    End If
+    Dim doScope As Boolean: doScope = frm.ReEnterScope
+    Unload frm: Set frm = Nothing
+
+    If doScope Then ReEnterScopeAndAlternates_ForCol ws, newCol
 
     RefreshHighlights_v10
 End Sub
@@ -86,53 +89,46 @@ Public Sub ReEnterScopeAndAlternates_ForCol(ByVal ws As Worksheet, ByVal bidderC
     Dim bidName As String: bidName = Trim$(CStr(ws.Cells(2, bidderCol).Value))
     If Len(bidName) = 0 Then bidName = "Column " & ColLetter(bidderCol)
 
+    ' Scope prompts — one form instance reused for each item
+    Dim frmEntry As New UF_ScopeEntry
     Dim r As Long
-    ' Scope prompts
     For r = ROW_SCOPE_START To scopeLast
         Dim desc As String: desc = Trim$(CStr(ws.Cells(r, COL_DESC).Value))
         If Len(desc) = 0 Then GoTo NextScope
         If UCase$(desc) = UCase$(KEY_ADD_SCOPE) Then GoTo NextScope
 
-        Dim resp As String
-        resp = Trim$(InputBox(bidName & " — does this bidder include:" & vbCrLf & desc & vbCrLf & vbCrLf & _
-                              "Type:" & vbCrLf & _
-                              " I = Included" & vbCrLf & _
-                              " E = Excluded" & vbCrLf & _
-                              " $ = Enter dollar amount" & vbCrLf & _
-                              " (blank) = Unconfirmed (skip)", "Scope Entry"))
-        If StrPtr(resp) = 0 Then Exit Sub
-        If resp = "" Then
-            ws.Cells(r, bidderCol).Value = TXT_UNCONF
-            ws.Cells(r, bidderCol).Interior.Color = RGB_LIGHT_YELLOW
-        ElseIf UCase$(resp) = "I" Then
-            ws.Cells(r, bidderCol).Value = TXT_INCLUDED
-            ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
-        ElseIf UCase$(resp) = "E" Then
-            ws.Cells(r, bidderCol).Value = TXT_EXCLUDED
-            ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
-        Else
-            Dim amt As String
-            amt = Trim$(InputBox("Enter amount (can be 1234 or 1000+200):" & vbCrLf & desc, "Amount"))
-            If StrPtr(amt) = 0 Then Exit Sub
-            If Len(amt) = 0 Then
+        frmEntry.SetItem bidName, desc
+        frmEntry.Show
+
+        Select Case frmEntry.Result
+            Case "STOP"
+                Unload frmEntry: Set frmEntry = Nothing
+                Exit Sub
+            Case "I"
+                ws.Cells(r, bidderCol).Value = TXT_INCLUDED
+                ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
+            Case "E"
+                ws.Cells(r, bidderCol).Value = TXT_EXCLUDED
+                ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
+            Case "$"
+                WriteAmountOrFormula ws.Cells(r, bidderCol), frmEntry.AmountText
+                ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
+            Case Else   ' "U" = unconfirmed/skip
                 ws.Cells(r, bidderCol).Value = TXT_UNCONF
                 ws.Cells(r, bidderCol).Interior.Color = RGB_LIGHT_YELLOW
-            Else
-                WriteAmountOrFormula ws.Cells(r, bidderCol), amt
-                ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
-            End If
-        End If
+        End Select
 NextScope:
     Next r
+    Unload frmEntry: Set frmEntry = Nothing
 
-    ' Alternates prompts
+    ' Alternates prompts — amount-only, keep as InputBox
     If altLast > 0 Then
         For r = scopeAnchor + 3 To altLast
             Dim aDesc As String: aDesc = Trim$(CStr(ws.Cells(r, COL_DESC).Value))
             If UCase$(Left$(aDesc, 9)) <> "ALTERNATE" Then GoTo NextAlt
 
             Dim aAmt As String
-            aAmt = Trim$(InputBox("Alternate amount for:" & vbCrLf & aDesc & vbCrLf & "(blank = Unconfirmed)", "Alternate Entry"))
+            aAmt = Trim$(InputBox(bidName & " — alternate amount for:" & vbCrLf & aDesc & vbCrLf & "(blank = Unconfirmed)", "Alternate Entry"))
             If StrPtr(aAmt) = 0 Then Exit Sub
             If aAmt = "" Then
                 ws.Cells(r, bidderCol).Value = TXT_UNCONF
@@ -156,47 +152,54 @@ Public Sub AddScopeLine_v10()
     desc = Trim$(InputBox("New Scope Description:", "Add Scope Line"))
     If StrPtr(desc) = 0 Or Len(desc) = 0 Then Exit Sub
 
-    Dim normalPrompt As VbMsgBoxResult
-    normalPrompt = MsgBox("Enter this new line as a normal Scope Entry?" & vbCrLf & _
-                          "YES = normal scope" & vbCrLf & _
-                          "NO  = Exception/Exclusion (light red)", vbYesNoCancel + vbQuestion, "Scope Type")
-    If normalPrompt = vbCancel Then Exit Sub
+    ' Show scope type form — Cancel exits before any row is inserted
+    Dim frmType As New UF_ScopeType
+    frmType.SetDesc desc
+    frmType.Show
+    Dim scopeTypeResult As Integer: scopeTypeResult = frmType.Result
+    Unload frmType: Set frmType = Nothing
+    If scopeTypeResult = 0 Then Exit Sub   ' Cancel -- Don't Add
 
+    ' Insert the row and set values
     ws.Rows(anchor).Insert Shift:=xlDown
-    ws.Cells(anchor, COL_DESC).Value = IIf(normalPrompt = vbYes, desc, "Exception: " & desc)
+    ws.Cells(anchor, COL_DESC).Value = IIf(scopeTypeResult = 1, desc, "Exception: " & desc)
     ws.Cells(anchor, COL_ADJ_FLAG).Value = "NO"
 
-    If normalPrompt = vbNo Then
+    If scopeTypeResult = 2 Then
         ws.Range(ws.Cells(anchor, 1), ws.Cells(anchor, COL_NOTES)).Interior.Color = RGB_LIGHT_RED
     End If
 
-    ' Prompt each existing bidder — show company name, not just column letter
+    ' Prompt each existing bidder with UF_ScopeEntry
     Dim lastCol As Long: lastCol = ws.Cells(ROW_WIZ_ACTION, ws.Columns.Count).End(xlToLeft).Column
+    Dim frmEntry As New UF_ScopeEntry
     Dim c As Long
     For c = COL_BIDDER_START To lastCol
         If Not IsBidderColEmpty(ws, c) Then
             Dim bidName As String: bidName = Trim$(CStr(ws.Cells(2, c).Value))
             If Len(bidName) = 0 Then bidName = "Column " & ColLetter(c)
 
-            Dim resp As String
-            resp = Trim$(InputBox("For " & bidName & ":" & vbCrLf & _
-                                  "Enter $ amount OR type I / E OR leave blank to skip (marks Unconfirmed).", "Scope Entry"))
-            If StrPtr(resp) = 0 Then Exit For
-            If resp = "" Then
-                ws.Cells(anchor, c).Value = TXT_UNCONF
-                ws.Cells(anchor, c).Interior.Color = RGB_LIGHT_YELLOW
-            ElseIf UCase$(resp) = "I" Then
-                ws.Cells(anchor, c).Value = TXT_INCLUDED
-                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
-            ElseIf UCase$(resp) = "E" Then
-                ws.Cells(anchor, c).Value = TXT_EXCLUDED
-                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
-            Else
-                WriteAmountOrFormula ws.Cells(anchor, c), resp
-                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
-            End If
+            frmEntry.SetItem bidName, desc
+            frmEntry.Show
+
+            Select Case frmEntry.Result
+                Case "STOP"
+                    Exit For
+                Case "I"
+                    ws.Cells(anchor, c).Value = TXT_INCLUDED
+                    ws.Cells(anchor, c).Interior.ColorIndex = xlNone
+                Case "E"
+                    ws.Cells(anchor, c).Value = TXT_EXCLUDED
+                    ws.Cells(anchor, c).Interior.ColorIndex = xlNone
+                Case "$"
+                    WriteAmountOrFormula ws.Cells(anchor, c), frmEntry.AmountText
+                    ws.Cells(anchor, c).Interior.ColorIndex = xlNone
+                Case Else   ' "U"
+                    ws.Cells(anchor, c).Value = TXT_UNCONF
+                    ws.Cells(anchor, c).Interior.Color = RGB_LIGHT_YELLOW
+            End Select
         End If
     Next c
+    Unload frmEntry: Set frmEntry = Nothing
 
     RefreshHighlights_v10
 End Sub

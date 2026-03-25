@@ -65,3 +65,12 @@ Public Const RGB_LIGHT_RED As Long = 14474460     ' #DCB9DC-ish – exception li
 Public Const RGB_GREY As Long = 15132390          ' #E6E6E6-ish
 Public Const RGB_LIGHT_GREEN As Long = 13421823   ' #C6EFCE-ish – lowest bidder highlight
 Public Const RGB_ORANGE As Long = 33023           ' RGB(255,128,0) – exclusion anomaly
+
+' Config_CSI project info (cols G=7/H=8, rows 1-4 — outside the trade data table)
+' Labels written to col G, values read/written in col H
+Public Const CFG_PROJ_LABEL_COL As Long = 7   ' Col G
+Public Const CFG_PROJ_VALUE_COL As Long = 8   ' Col H
+Public Const CFG_PROJ_ROW_NAME As Long = 1    ' Row 1 = Project Name
+Public Const CFG_PROJ_ROW_EST As Long = 2     ' Row 2 = Estimator
+Public Const CFG_PROJ_ROW_DATE As Long = 3    ' Row 3 = Bid Date
+Public Const CFG_PROJ_ROW_GSF As Long = 4     ' Row 4 = Job GSF
