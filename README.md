@@ -21,7 +21,7 @@
 | `TSC_v10_Core.bas` | *(constants only)* |
 | `TSC_v10_Utils.bas` | *(shared helpers)* |
 | `TSC_v10_BidderAndLines.bas` | `AddBidder_v10`, `ReEnterScope_v10`, `AddScopeLine_v10`, `AddAlternate_v10`, `MoveExclusionsToBottom_v10` |
-| `TSC_v10_GenerateTradeTabs.bas` | `GenerateTradeTabs_v10` |
+| `TSC_v10_GenerateTradeTabs.bas` | `GenerateTradeTabs_v10`, `ToggleAllCreate_v10` |
 | `TSC_v10_SortBidders.bas` | `SortBidders_ByBaseBid_v10`, `SortBidders_ByAdjustedBid_v10` |
 | `TSC_v10_Evaluation.bas` | `RefreshHighlights_v10` |
 | `TSC_v10_SanityCheck.bas` | `SanityCheck_v10` |

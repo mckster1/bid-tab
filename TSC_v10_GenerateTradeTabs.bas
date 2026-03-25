@@ -150,3 +150,40 @@ Private Sub ClearSeededScope(ByVal ws As Worksheet)
         End If
     Loop
 End Sub
+
+' =========================
+' TOGGLE ALL CREATE CHECKBOXES
+' =========================
+' Assigns to a single button on Config_CSI.
+' If all rows are checked (TRUE) → unchecks all.
+' If any row is unchecked → checks all.
+Public Sub ToggleAllCreate_v10()
+    Dim wb As Workbook: Set wb = ThisWorkbook
+    Dim cfg As Worksheet
+    On Error Resume Next
+    Set cfg = wb.Worksheets(SHEET_CONFIG)
+    On Error GoTo 0
+    If cfg Is Nothing Then MsgBox "Missing Config_CSI sheet.", vbExclamation: Exit Sub
+
+    Dim colCreate As Long: colCreate = FindHeaderCol(cfg, "Create")
+    If colCreate = 0 Then MsgBox "Can't find 'Create' column in Config_CSI.", vbExclamation: Exit Sub
+
+    Dim lastRow As Long: lastRow = cfg.Cells(cfg.Rows.Count, colCreate).End(xlUp).Row
+    If lastRow < 2 Then MsgBox "No data rows found in Config_CSI.", vbInformation: Exit Sub
+
+    ' Check whether all rows are currently TRUE
+    Dim allChecked As Boolean: allChecked = True
+    Dim r As Long
+    For r = 2 To lastRow
+        If Not IsTruthy(cfg.Cells(r, colCreate).Value) Then
+            allChecked = False
+            Exit For
+        End If
+    Next r
+
+    ' Toggle: if all checked → uncheck all; otherwise → check all
+    Dim newValue As Boolean: newValue = Not allChecked
+    For r = 2 To lastRow
+        cfg.Cells(r, colCreate).Value = newValue
+    Next r
+End Sub
