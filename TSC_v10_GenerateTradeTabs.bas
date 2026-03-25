@@ -168,14 +168,21 @@ Public Sub ToggleAllCreate_v10()
     Dim colCreate As Long: colCreate = FindHeaderCol(cfg, "Create")
     If colCreate = 0 Then MsgBox "Can't find 'Create' column in Config_CSI.", vbExclamation: Exit Sub
 
-    Dim lastRow As Long: lastRow = cfg.Cells(cfg.Rows.Count, colCreate).End(xlUp).Row
+    ' Anchor lastRow to TradeName column — more reliable than Create column with checkboxes
+    Dim colTrade As Long: colTrade = FindHeaderCol(cfg, "TradeName")
+    Dim lastRow As Long
+    If colTrade > 0 Then
+        lastRow = cfg.Cells(cfg.Rows.Count, colTrade).End(xlUp).Row
+    Else
+        lastRow = cfg.Cells(cfg.Rows.Count, colCreate).End(xlUp).Row
+    End If
     If lastRow < 2 Then MsgBox "No data rows found in Config_CSI.", vbInformation: Exit Sub
 
-    ' Check whether all rows are currently TRUE
+    ' Use .Value2 — avoids Type Mismatch from native Excel 365 checkbox type coercion
     Dim allChecked As Boolean: allChecked = True
     Dim r As Long
     For r = 2 To lastRow
-        If Not IsTruthy(cfg.Cells(r, colCreate).Value) Then
+        If Not IsTruthy(cfg.Cells(r, colCreate).Value2) Then
             allChecked = False
             Exit For
         End If
@@ -184,6 +191,6 @@ Public Sub ToggleAllCreate_v10()
     ' Toggle: if all checked → uncheck all; otherwise → check all
     Dim newValue As Boolean: newValue = Not allChecked
     For r = 2 To lastRow
-        cfg.Cells(r, colCreate).Value = newValue
+        cfg.Cells(r, colCreate).Value2 = newValue
     Next r
 End Sub
