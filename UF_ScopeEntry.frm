@@ -19,7 +19,6 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} UF_ScopeEntry
       Left            =   120
       Top             =   420
       Width           =   5160
-      WordWrap        =   -1  'True
    End
    Begin MSForms.Frame fraResponse
       Caption         =   "Bidder's response:"
@@ -56,7 +55,6 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} UF_ScopeEntry
          Width           =   1440
       End
       Begin MSForms.TextBox txtAmount
-         Enabled         =   0   'False
          Height          =   270
          Left            =   1680
          TabIndex        =   3
@@ -103,6 +101,7 @@ Public Result As String
 Public AmountText As String
 
 Private Sub UserForm_Initialize()
+    lblDesc.WordWrap = True
     Result = "U"
     AmountText = ""
     optSkip.Value = True

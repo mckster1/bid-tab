@@ -19,7 +19,6 @@ Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} UF_ScopeType
       Left            =   120
       Top             =   420
       Width           =   4560
-      WordWrap        =   -1  'True
    End
    Begin MSForms.CommandButton btnNormal
       Caption         =   "Normal Scope Line"
@@ -62,6 +61,7 @@ Public Sub SetDesc(ByVal desc As String)
 End Sub
 
 Private Sub UserForm_Initialize()
+    lblDesc.WordWrap = True
     Result = 0
 End Sub
 
