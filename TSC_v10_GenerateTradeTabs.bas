@@ -35,29 +35,30 @@ Public Sub GenerateTradeTabs_v10()
     Dim savedDate As String: savedDate = Trim$(CStr(cfg.Cells(CFG_PROJ_ROW_DATE, CFG_PROJ_VALUE_COL).Value))
     Dim savedGSF As String: savedGSF = Trim$(CStr(cfg.Cells(CFG_PROJ_ROW_GSF, CFG_PROJ_VALUE_COL).Value))
 
-    ' Page 1: Project Name, Estimator, Bid Date, Job GSF
-    Dim frm1 As New UF_JobInfo
-    frm1.Prefill savedName, savedEst, savedDate, savedGSF
-    frm1.Show
-    If frm1.Cancelled Then Unload frm1: Set frm1 = Nothing: Exit Sub
+    ' Collect job info — saved values pre-fill as defaults; Cancel exits
+    Dim jobTitle As String: jobTitle = InputBox("Project Name:", "Generate Trade Tabs", savedName)
+    If StrPtr(jobTitle) = 0 Then Exit Sub
 
-    ' Page 2: Trade SF + overwrite options
-    Dim frm2 As New UF_JobInfo2
-    frm2.Show
-    If frm2.Cancelled Then
-        Unload frm1: Set frm1 = Nothing
-        Unload frm2: Set frm2 = Nothing
-        Exit Sub
-    End If
+    Dim estimator As String: estimator = InputBox("Estimator:", "Generate Trade Tabs", savedEst)
+    If StrPtr(estimator) = 0 Then Exit Sub
 
-    Dim jobTitle As String: jobTitle = frm1.ProjName
-    Dim estimator As String: estimator = frm1.Estimator
-    Dim bidDate As String: bidDate = frm1.BidDate
-    Dim jobGsf As String: jobGsf = frm1.JobGSF
-    Dim tradeSf As String: tradeSf = frm2.TradeSF
-    Dim overwriteDefaults As Long: overwriteDefaults = frm2.OverwriteScope
-    Unload frm1: Set frm1 = Nothing
-    Unload frm2: Set frm2 = Nothing
+    Dim bidDate As String: bidDate = InputBox("Bid Date:", "Generate Trade Tabs", savedDate)
+    If StrPtr(bidDate) = 0 Then Exit Sub
+
+    Dim jobGsf As String: jobGsf = InputBox("Job GSF:", "Generate Trade Tabs", savedGSF)
+    If StrPtr(jobGsf) = 0 Then Exit Sub
+
+    Dim tradeSf As String: tradeSf = InputBox("Trade SF (this run only — not saved):", "Generate Trade Tabs")
+    If StrPtr(tradeSf) = 0 Then Exit Sub
+
+    Dim owChoice As VbMsgBoxResult
+    owChoice = MsgBox("Overwrite scope lines on existing tabs?" & vbCrLf & vbCrLf & _
+                      "Yes    = Clear + re-seed ALL selected tabs" & vbCrLf & _
+                      "No     = Seed only NEW tabs  (default)" & vbCrLf & _
+                      "Cancel = Abort", _
+                      vbYesNoCancel + vbQuestion, "Generate Trade Tabs")
+    If owChoice = vbCancel Then Exit Sub
+    Dim overwriteDefaults As Long: overwriteDefaults = IIf(owChoice = vbYes, 1, 2)
 
     ' Save project info back to Config_CSI for reuse on next run
     WriteProjectInfoToConfig cfg, jobTitle, estimator, bidDate, jobGsf
