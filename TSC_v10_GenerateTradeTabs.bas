@@ -35,19 +35,29 @@ Public Sub GenerateTradeTabs_v10()
     Dim savedDate As String: savedDate = Trim$(CStr(cfg.Cells(CFG_PROJ_ROW_DATE, CFG_PROJ_VALUE_COL).Value))
     Dim savedGSF As String: savedGSF = Trim$(CStr(cfg.Cells(CFG_PROJ_ROW_GSF, CFG_PROJ_VALUE_COL).Value))
 
-    ' Show job info form (pre-filled with saved values if any)
-    Dim frm As New UF_JobInfo
-    frm.Prefill savedName, savedEst, savedDate, savedGSF
-    frm.Show
-    If frm.Cancelled Then Unload frm: Set frm = Nothing: Exit Sub
+    ' Page 1: Project Name, Estimator, Bid Date, Job GSF
+    Dim frm1 As New UF_JobInfo
+    frm1.Prefill savedName, savedEst, savedDate, savedGSF
+    frm1.Show
+    If frm1.Cancelled Then Unload frm1: Set frm1 = Nothing: Exit Sub
 
-    Dim jobTitle As String: jobTitle = frm.ProjName
-    Dim estimator As String: estimator = frm.Estimator
-    Dim bidDate As String: bidDate = frm.BidDate
-    Dim jobGsf As String: jobGsf = frm.JobGSF
-    Dim tradeSf As String: tradeSf = frm.TradeSF
-    Dim overwriteDefaults As Long: overwriteDefaults = frm.OverwriteScope
-    Unload frm: Set frm = Nothing
+    ' Page 2: Trade SF + overwrite options
+    Dim frm2 As New UF_JobInfo2
+    frm2.Show
+    If frm2.Cancelled Then
+        Unload frm1: Set frm1 = Nothing
+        Unload frm2: Set frm2 = Nothing
+        Exit Sub
+    End If
+
+    Dim jobTitle As String: jobTitle = frm1.ProjName
+    Dim estimator As String: estimator = frm1.Estimator
+    Dim bidDate As String: bidDate = frm1.BidDate
+    Dim jobGsf As String: jobGsf = frm1.JobGSF
+    Dim tradeSf As String: tradeSf = frm2.TradeSF
+    Dim overwriteDefaults As Long: overwriteDefaults = frm2.OverwriteScope
+    Unload frm1: Set frm1 = Nothing
+    Unload frm2: Set frm2 = Nothing
 
     ' Save project info back to Config_CSI for reuse on next run
     WriteProjectInfoToConfig cfg, jobTitle, estimator, bidDate, jobGsf

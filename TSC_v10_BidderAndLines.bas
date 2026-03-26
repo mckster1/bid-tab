@@ -11,10 +11,19 @@ Public Sub AddBidder_v10()
         Exit Sub
     End If
 
-    ' Show form BEFORE writing any cells — true Cancel means no changes
-    Dim frm As New UF_AddBidder
-    frm.Show
-    If frm.Cancelled Then Unload frm: Set frm = Nothing: Exit Sub
+    ' Page 1: Company, Contact, Phone, Email
+    Dim frm1 As New UF_AddBidder
+    frm1.Show
+    If frm1.Cancelled Then Unload frm1: Set frm1 = Nothing: Exit Sub
+
+    ' Page 2: Date, Notes, Base Bid, Re-enter option
+    Dim frm2 As New UF_AddBidder2
+    frm2.Show
+    If frm2.Cancelled Then
+        Unload frm1: Set frm1 = Nothing
+        Unload frm2: Set frm2 = Nothing
+        Exit Sub
+    End If
 
     Dim newCol As Long: newCol = NextBidderCol(ws)
 
@@ -25,19 +34,20 @@ Public Sub AddBidder_v10()
     ws.Cells(ROW_WIZ_ACTION, newCol).Value = BIDDER_INCLUDE
     ApplyIncludeExcludeValidation ws, newCol
 
-    ' Write header fields from form
-    ws.Cells(2, newCol).Value = frm.Company
-    ws.Cells(3, newCol).Value = frm.Contact
-    ws.Cells(4, newCol).Value = frm.Phone
-    ws.Cells(5, newCol).Value = frm.Email
-    ws.Cells(6, newCol).Value = frm.DateReceived
-    ws.Cells(7, newCol).Value = frm.Notes
+    ' Write header fields from both form pages
+    ws.Cells(2, newCol).Value = frm1.Company
+    ws.Cells(3, newCol).Value = frm1.Contact
+    ws.Cells(4, newCol).Value = frm1.Phone
+    ws.Cells(5, newCol).Value = frm1.Email
+    ws.Cells(6, newCol).Value = frm2.DateReceived
+    ws.Cells(7, newCol).Value = frm2.Notes
 
     ' Base bid supports expressions like 1000+200
-    If Len(frm.BaseBid) > 0 Then WriteAmountOrFormula ws.Cells(ROW_BASE_BID, newCol), frm.BaseBid
+    If Len(frm2.BaseBid) > 0 Then WriteAmountOrFormula ws.Cells(ROW_BASE_BID, newCol), frm2.BaseBid
 
-    Dim doScope As Boolean: doScope = frm.ReEnterScope
-    Unload frm: Set frm = Nothing
+    Dim doScope As Boolean: doScope = frm2.ReEnterScope
+    Unload frm1: Set frm1 = Nothing
+    Unload frm2: Set frm2 = Nothing
 
     If doScope Then ReEnterScopeAndAlternates_ForCol ws, newCol
 
