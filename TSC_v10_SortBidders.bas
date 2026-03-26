@@ -1,20 +1,16 @@
-Attribute VB_Name = "TSC_v9_1_SortBidders"
+Attribute VB_Name = "TSC_v10_SortBidders"
 Option Explicit
+
+Private Const HUGE As Double = 9.9E+307
 
 '===========================
 ' PUBLIC MACROS (button-bind)
 '===========================
-' These TWO procedures are what you should see in Assign Macro:
-'  - SortBidders_ByBaseBid_v9_1
-'  - SortBidders_ByAdjustedBid_v9_1
-
-Private Const HUGE As Double = 9.9E+307
-
-Public Sub SortBidders_ByBaseBid_v9_1()
+Public Sub SortBidders_ByBaseBid_v10()
     SortBidders_Internal True
 End Sub
 
-Public Sub SortBidders_ByAdjustedBid_v9_1()
+Public Sub SortBidders_ByAdjustedBid_v10()
     SortBidders_Internal False
 End Sub
 
@@ -57,7 +53,7 @@ Private Sub SortBidders_Internal(ByVal sortOnBaseBid As Boolean)
         Exit Sub
     End If
 
-    ' Sort by score ascending
+    ' Bubble sort by score ascending (lowest bid leftmost; excluded/blank goes right)
     Dim i As Long, j As Long, tmpC As Long, tmpS As Double
     For i = 1 To n - 1
         For j = i + 1 To n
@@ -68,7 +64,7 @@ Private Sub SortBidders_Internal(ByVal sortOnBaseBid As Boolean)
         Next j
     Next i
 
-    ' Temp sheet approach avoids Excel column-shift chaos
+    ' Temp sheet approach avoids Excel column-shift corruption
     Dim wb As Workbook: Set wb = ws.Parent
     Dim tmp As Worksheet
 
@@ -81,6 +77,8 @@ Private Sub SortBidders_Internal(ByVal sortOnBaseBid As Boolean)
     Set tmp = wb.Worksheets.Add(After:=wb.Worksheets(wb.Worksheets.Count))
     tmp.Name = "zz_tmpSort"
     tmp.Visible = xlSheetVeryHidden
+
+    Application.ScreenUpdating = False
 
     For i = 1 To n
         ws.Range(ws.Cells(1, cols(i)), ws.Cells(lastRow, cols(i))).Copy
@@ -106,11 +104,14 @@ Private Sub SortBidders_Internal(ByVal sortOnBaseBid As Boolean)
     tmp.Delete
     Application.DisplayAlerts = True
 
-    MsgBox IIf(sortOnBaseBid, "Sorted by Base Bid.", "Sorted by Adjusted Base Bid."), vbInformation
+    ' Refresh evaluation summary and highlights after sort
+    RefreshHighlights_v10
+
+    Application.ScreenUpdating = True
 End Sub
 
 Private Function ScoreBidder(ByVal ws As Worksheet, ByVal col As Long, ByVal sortOnBaseBid As Boolean) As Double
-    ' Excluded bidders go last
+    ' Excluded bidders sort last
     Dim action As String
     action = UCase$(Trim$(CStr(ws.Cells(ROW_WIZ_ACTION, col).Value)))
     If action = BIDDER_EXCLUDE Then

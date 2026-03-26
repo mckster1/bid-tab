@@ -1,4 +1,4 @@
-Attribute VB_Name = "TSC_v9_1_Core"
+Attribute VB_Name = "TSC_v10_Core"
 Option Explicit
 
 ' ===== Core sheet names =====
@@ -9,7 +9,7 @@ Public Const SHEET_CONFIG As String = "Config_CSI"
 Public Const KEY_ADD_SCOPE As String = "ADD SCOPE LINE"
 Public Const KEY_ADD_ALT As String = "ADD ALTERNATE"
 
-' ===== Template layout (v8-compatible) =====
+' ===== Template layout =====
 ' Identity cells (left block)
 Public Const CELL_TRADE_NAME As String = "C2"
 Public Const CELL_CSI As String = "C3"
@@ -34,6 +34,15 @@ Public Const COL_BIDDER_START As Long = 9     ' I  (first bidder col)
 Public Const ROW_BASE_BID As Long = 11        ' Base Bid value row
 Public Const ROW_ADJ_BASE As Long = 12        ' Adjusted Base Bid value row
 Public Const ROW_PSF As Long = 13             ' $/SF value row
+
+' Evaluation summary rows (between $/SF row 13 and scope anchor row 17)
+Public Const ROW_LOWEST_BIDDER As Long = 14   ' Lowest adjusted bidder name
+Public Const ROW_AVG_BASE As Long = 15        ' Average Base Bid (included bidders)
+Public Const ROW_AVG_ADJ As Long = 16         ' Average Adjusted Base Bid (included bidders)
+
+' Scope section start row (first possible scope item; template anchor defaults to B17)
+Public Const ROW_SCOPE_START As Long = 17
+
 Public Const ROW_WIZ_ACTION As Long = 8       ' "Wizard Action" row (Include/Exclude dropdown)
 
 ' Text markers
@@ -41,12 +50,27 @@ Public Const TXT_INCLUDED As String = "INCLUDED"
 Public Const TXT_EXCLUDED As String = "EXCLUDED"
 Public Const TXT_UNCONF As String = "UNCONFIRMED"
 
+' Evaluation row labels
+Public Const TXT_LBL_LOWEST As String = "Lowest Adj Bidder"
+Public Const TXT_LBL_AVG_BASE As String = "Avg Base Bid"
+Public Const TXT_LBL_AVG_ADJ As String = "Avg Adj Base Bid"
+
 ' Include/Exclude dropdown values
 Public Const BIDDER_INCLUDE As String = "INCLUDE"
 Public Const BIDDER_EXCLUDE As String = "EXCLUDE"
 
-' Color helpers (RGB)
-Public Const RGB_LIGHT_YELLOW As Long = 13434879  ' #FFF2CC-ish
-Public Const RGB_LIGHT_RED As Long = 14474460     ' #F8CBAD-ish
+' Color helpers (RGB long values)
+Public Const RGB_LIGHT_YELLOW As Long = 13434879  ' #FFFFCC – UNCONFIRMED
+Public Const RGB_LIGHT_RED As Long = 14474460     ' #DCB9DC-ish – exception lines
 Public Const RGB_GREY As Long = 15132390          ' #E6E6E6-ish
-Public Const RGB_LIGHT_GREEN As Long = 13421823   ' #C6EFCE-ish
+Public Const RGB_LIGHT_GREEN As Long = 13421823   ' #C6EFCE-ish – lowest bidder highlight
+Public Const RGB_ORANGE As Long = 33023           ' RGB(255,128,0) – exclusion anomaly
+
+' Config_CSI project info (cols G=7/H=8, rows 1-4 — outside the trade data table)
+' Labels written to col G, values read/written in col H
+Public Const CFG_PROJ_LABEL_COL As Long = 7   ' Col G
+Public Const CFG_PROJ_VALUE_COL As Long = 8   ' Col H
+Public Const CFG_PROJ_ROW_NAME As Long = 1    ' Row 1 = Project Name
+Public Const CFG_PROJ_ROW_EST As Long = 2     ' Row 2 = Estimator
+Public Const CFG_PROJ_ROW_DATE As Long = 3    ' Row 3 = Bid Date
+Public Const CFG_PROJ_ROW_GSF As Long = 4     ' Row 4 = Job GSF
