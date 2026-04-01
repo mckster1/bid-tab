@@ -40,10 +40,8 @@ Public Sub AddBidder_v10()
     ' All input collected — now write to sheet
     Dim newCol As Long: newCol = NextBidderCol(ws)
 
-    ' Copy formatting from the first bidder column template (Column I)
     CopyBidderColFormat ws, COL_BIDDER_START, newCol
 
-    ' Set Wizard Action dropdown default to INCLUDE
     ws.Cells(ROW_WIZ_ACTION, newCol).Value = BIDDER_INCLUDE
     ApplyIncludeExcludeValidation ws, newCol
 
@@ -54,10 +52,9 @@ Public Sub AddBidder_v10()
     ws.Cells(6, newCol).Value = dateRcvd
     ws.Cells(7, newCol).Value = notes
 
-    ' Base bid supports expressions like 1000+200
     If Len(Trim$(baseBid)) > 0 Then WriteAmountOrFormula ws.Cells(ROW_BASE_BID, newCol), baseBid
 
-    If doScope Then ReEnterScopeAndAlternates_ForCol ws, newCol
+    If doScope Then ReEnterScopeAndAlternates_ForCol ws, newCol, True
 
     RefreshHighlights_v10
 End Sub
@@ -88,68 +85,108 @@ Public Sub ReEnterScope_v10()
     If MsgBox("Re-enter scope + alternates for:" & vbCrLf & bidName & "?", _
               vbYesNo + vbQuestion, "Re-enter Scope") = vbNo Then Exit Sub
 
-    ReEnterScopeAndAlternates_ForCol ws, col
+    ReEnterScopeAndAlternates_ForCol ws, col, False
     RefreshHighlights_v10
 End Sub
 
 ' =========================
 ' RE-ENTER SCOPE + ALTS for a given bidder column
+' blankIsUnconf = True  → blank response writes UNCONFIRMED (AddBidder, AddAlternate contexts)
+' blankIsUnconf = False → blank response keeps the existing cell value (ReEnterScope context)
 ' =========================
-Public Sub ReEnterScopeAndAlternates_ForCol(ByVal ws As Worksheet, ByVal bidderCol As Long)
+Public Sub ReEnterScopeAndAlternates_ForCol(ByVal ws As Worksheet, ByVal bidderCol As Long, ByVal blankIsUnconf As Boolean)
     Dim scopeAnchor As Long: scopeAnchor = FindRowKeyInColB(ws, KEY_ADD_SCOPE)
     If scopeAnchor = 0 Then MsgBox "Can't find '" & KEY_ADD_SCOPE & "' in col B.", vbExclamation: Exit Sub
     Dim scopeLast As Long: scopeLast = scopeAnchor - 1
 
     Dim altAnchor As Long: altAnchor = FindRowKeyInColB(ws, KEY_ADD_ALT)
-    Dim altLast As Long
-    If altAnchor > 0 Then altLast = altAnchor - 1 Else altLast = 0
 
     Dim bidName As String: bidName = Trim$(CStr(ws.Cells(2, bidderCol).Value))
     If Len(bidName) = 0 Then bidName = "Column " & ColLetter(bidderCol)
 
-    ' Scope prompts — InputBox per item; Cancel exits immediately
-    Dim r As Long
+    Dim blankLabel As String
+    blankLabel = IIf(blankIsUnconf, "Unconfirmed / Skip", "Keep existing")
+
+    ' Scope prompts — Cancel exits immediately
+    Dim r As Long, resp As String, respRaw As String, respUC As String
     For r = ROW_SCOPE_START To scopeLast
         Dim desc As String: desc = Trim$(CStr(ws.Cells(r, COL_DESC).Value))
         If Len(desc) = 0 Then GoTo NextScope
         If UCase$(desc) = UCase$(KEY_ADD_SCOPE) Then GoTo NextScope
 
-        Dim resp As String
         resp = InputBox(bidName & vbCrLf & vbCrLf & desc & vbCrLf & vbCrLf & _
-                        "I = Included   E = Excluded   [number] = Dollar amount   blank = Unconfirmed" & vbCrLf & _
+                        "[number] = Dollar amount" & vbCrLf & _
+                        "blank    = " & blankLabel & vbCrLf & _
+                        "I        = Included" & vbCrLf & _
+                        "E        = Excluded" & vbCrLf & _
                         "(Cancel to stop)", "Scope Entry")
-        If StrPtr(resp) = 0 Then Exit Sub   ' Cancel = stop all scope entry
+        If StrPtr(resp) = 0 Then Exit Sub
 
-        resp = Trim$(UCase$(resp))
-        If resp = "I" Then
+        respRaw = Trim$(resp)
+        respUC = UCase$(respRaw)
+
+        If respUC = "I" Then
             ws.Cells(r, bidderCol).Value = TXT_INCLUDED
             ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
-        ElseIf resp = "E" Then
+        ElseIf respUC = "E" Then
             ws.Cells(r, bidderCol).Value = TXT_EXCLUDED
             ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
-        ElseIf Len(resp) > 0 Then
-            WriteAmountOrFormula ws.Cells(r, bidderCol), resp
+        ElseIf Len(respRaw) > 0 Then
+            WriteAmountOrFormula ws.Cells(r, bidderCol), respRaw
             ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
-        Else
+        ElseIf blankIsUnconf Then
             ws.Cells(r, bidderCol).Value = TXT_UNCONF
             ws.Cells(r, bidderCol).Interior.Color = RGB_LIGHT_YELLOW
         End If
+        ' else blankIsUnconf=False: keep existing (do nothing)
 NextScope:
     Next r
 
-    ' Alternates prompts — amount-only, keep as InputBox
-    If altLast > 0 Then
-        For r = scopeAnchor + 3 To altLast
-            Dim aDesc As String: aDesc = Trim$(CStr(ws.Cells(r, COL_DESC).Value))
+    ' Alternates — auto-formula for "+Adjusted Base Bid" rows; prompt for "Alternate N:" rows
+    If altAnchor > 0 Then
+        Dim altDataLast As Long
+        altDataLast = ws.Cells(ws.Rows.Count, COL_DESC).End(xlUp).Row
+
+        Dim aDesc As String, aAmt As String, aAmtRaw As String, aAmtUC As String
+        Dim adjRef As String, altRef As String
+        For r = altAnchor + 1 To altDataLast
+            aDesc = Trim$(CStr(ws.Cells(r, COL_DESC).Value))
+            If Len(aDesc) = 0 Then GoTo NextAlt
+
+            ' Auto-write formula for "+Adjusted Base Bid" rows — no prompt
+            If InStr(UCase$(aDesc), "ADJUSTED BASE BID") > 0 Then
+                adjRef = ws.Cells(ROW_ADJ_BASE, bidderCol).Address(False, False)
+                altRef = ws.Cells(r - 1, bidderCol).Address(False, False)
+                ws.Cells(r, bidderCol).Formula = "=IFERROR(" & adjRef & "+IF(ISNUMBER(" & altRef & ")," & altRef & ",0),"""")"
+                GoTo NextAlt
+            End If
+
+            ' Only prompt for "Alternate N:" rows
             If UCase$(Left$(aDesc, 9)) <> "ALTERNATE" Then GoTo NextAlt
 
-            Dim aAmt As String
-            aAmt = Trim$(InputBox(bidName & " — alternate amount for:" & vbCrLf & aDesc & vbCrLf & "(blank = Unconfirmed)", "Alternate Entry"))
+            aAmt = InputBox(bidName & " — " & aDesc & vbCrLf & vbCrLf & _
+                            "[number] = Dollar amount" & vbCrLf & _
+                            "blank    = " & blankLabel & vbCrLf & _
+                            "E        = Excluded" & vbCrLf & _
+                            "I        = Included" & vbCrLf & _
+                            "(Cancel to stop)", "Alternate Entry")
             If StrPtr(aAmt) = 0 Then Exit Sub
-            If aAmt = "" Then
+
+            aAmtRaw = Trim$(aAmt)
+            aAmtUC = UCase$(aAmtRaw)
+
+            If aAmtUC = "E" Then
+                ws.Cells(r, bidderCol).Value = TXT_EXCLUDED
+                ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
+            ElseIf aAmtUC = "I" Then
+                ws.Cells(r, bidderCol).Value = TXT_INCLUDED
+                ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
+            ElseIf Len(aAmtRaw) > 0 Then
+                WriteAmountOrFormula ws.Cells(r, bidderCol), aAmtRaw
+                ws.Cells(r, bidderCol).Interior.ColorIndex = xlNone
+            ElseIf blankIsUnconf Then
                 ws.Cells(r, bidderCol).Value = TXT_UNCONF
-            Else
-                WriteAmountOrFormula ws.Cells(r, bidderCol), aAmt
+                ws.Cells(r, bidderCol).Interior.Color = RGB_LIGHT_YELLOW
             End If
 NextAlt:
         Next r
@@ -168,7 +205,6 @@ Public Sub AddScopeLine_v10()
     desc = Trim$(InputBox("New Scope Description:", "Add Scope Line"))
     If StrPtr(desc) = 0 Or Len(desc) = 0 Then Exit Sub
 
-    ' Scope type: MsgBox — Cancel exits before any row is inserted
     Dim typeChoice As VbMsgBoxResult
     typeChoice = MsgBox("Add """ & desc & """ as an exception / exclusion line (red row)?" & vbCrLf & vbCrLf & _
                         "Yes = Exception / Exclusion (red row)" & vbCrLf & _
@@ -179,7 +215,6 @@ Public Sub AddScopeLine_v10()
 
     Dim isException As Boolean: isException = (typeChoice = vbYes)
 
-    ' Insert the row and set values
     ws.Rows(anchor).Insert Shift:=xlDown
     ws.Cells(anchor, COL_DESC).Value = IIf(isException, "Exception: " & desc, desc)
     ws.Cells(anchor, COL_ADJ_FLAG).Value = "NO"
@@ -190,27 +225,31 @@ Public Sub AddScopeLine_v10()
 
     ' Prompt each existing bidder — Cancel stops the loop (row already added)
     Dim lastCol As Long: lastCol = ws.Cells(ROW_WIZ_ACTION, ws.Columns.Count).End(xlToLeft).Column
-    Dim c As Long
+    Dim c As Long, resp As String, respRaw As String, respUC As String, bidName As String
     For c = COL_BIDDER_START To lastCol
         If Not IsBidderColEmpty(ws, c) Then
-            Dim bidName As String: bidName = Trim$(CStr(ws.Cells(2, c).Value))
+            bidName = Trim$(CStr(ws.Cells(2, c).Value))
             If Len(bidName) = 0 Then bidName = "Column " & ColLetter(c)
 
-            Dim resp As String
             resp = InputBox(bidName & vbCrLf & vbCrLf & desc & vbCrLf & vbCrLf & _
-                            "I = Included   E = Excluded   [number] = Dollar amount   blank = Unconfirmed" & vbCrLf & _
+                            "[number] = Dollar amount" & vbCrLf & _
+                            "blank    = Unconfirmed / Skip" & vbCrLf & _
+                            "I        = Included" & vbCrLf & _
+                            "E        = Excluded" & vbCrLf & _
                             "(Cancel to stop entering)", "Scope Entry")
-            If StrPtr(resp) = 0 Then Exit For   ' Cancel = stop prompting remaining bidders
+            If StrPtr(resp) = 0 Then Exit For
 
-            resp = Trim$(UCase$(resp))
-            If resp = "I" Then
+            respRaw = Trim$(resp)
+            respUC = UCase$(respRaw)
+
+            If respUC = "I" Then
                 ws.Cells(anchor, c).Value = TXT_INCLUDED
                 ws.Cells(anchor, c).Interior.ColorIndex = xlNone
-            ElseIf resp = "E" Then
+            ElseIf respUC = "E" Then
                 ws.Cells(anchor, c).Value = TXT_EXCLUDED
                 ws.Cells(anchor, c).Interior.ColorIndex = xlNone
-            ElseIf Len(resp) > 0 Then
-                WriteAmountOrFormula ws.Cells(anchor, c), resp
+            ElseIf Len(respRaw) > 0 Then
+                WriteAmountOrFormula ws.Cells(anchor, c), respRaw
                 ws.Cells(anchor, c).Interior.ColorIndex = xlNone
             Else
                 ws.Cells(anchor, c).Value = TXT_UNCONF
@@ -238,12 +277,49 @@ Public Sub AddAlternate_v10()
     ws.Cells(anchor, COL_DESC).Value = "Alternate " & n & ":"
     ws.Cells(anchor + 1, COL_DESC).Value = "Alternate " & n & " + Adjusted Base Bid"
 
-    ' Write Alt+Adjusted formula for each bidder column
+    ' Write Alt+Adjusted formula for budget col and all bidder cols
     Dim lastCol As Long: lastCol = ws.Cells(ROW_WIZ_ACTION, ws.Columns.Count).End(xlToLeft).Column
-    Dim c As Long
+    Dim c As Long, adjRef As String, altRef As String
     For c = COL_BUDGET To lastCol
         If c = COL_BUDGET Or Not IsBidderColEmpty(ws, c) Then
-            ws.Cells(anchor + 1, c).Formula = "=IFERROR(" & ws.Cells(ROW_ADJ_BASE, c).Address(False, False) & "+" & ws.Cells(anchor, c).Address(False, False) & ","""")"
+            adjRef = ws.Cells(ROW_ADJ_BASE, c).Address(False, False)
+            altRef = ws.Cells(anchor, c).Address(False, False)
+            ws.Cells(anchor + 1, c).Formula = "=IFERROR(" & adjRef & "+IF(ISNUMBER(" & altRef & ")," & altRef & ",0),"""")"
+        End If
+    Next c
+
+    ' Prompt each bidder for their alternate amount
+    Dim altDesc As String: altDesc = CStr(ws.Cells(anchor, COL_DESC).Value)
+    Dim bidName As String, aAmt As String, aAmtRaw As String, aAmtUC As String
+    For c = COL_BIDDER_START To lastCol
+        If Not IsBidderColEmpty(ws, c) Then
+            bidName = Trim$(CStr(ws.Cells(2, c).Value))
+            If Len(bidName) = 0 Then bidName = "Column " & ColLetter(c)
+
+            aAmt = InputBox(bidName & " — " & altDesc & vbCrLf & vbCrLf & _
+                            "[number] = Dollar amount" & vbCrLf & _
+                            "blank    = Unconfirmed / Skip" & vbCrLf & _
+                            "E        = Excluded" & vbCrLf & _
+                            "I        = Included" & vbCrLf & _
+                            "(Cancel to stop)", "Alternate Entry")
+            If StrPtr(aAmt) = 0 Then Exit For
+
+            aAmtRaw = Trim$(aAmt)
+            aAmtUC = UCase$(aAmtRaw)
+
+            If aAmtUC = "E" Then
+                ws.Cells(anchor, c).Value = TXT_EXCLUDED
+                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
+            ElseIf aAmtUC = "I" Then
+                ws.Cells(anchor, c).Value = TXT_INCLUDED
+                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
+            ElseIf Len(aAmtRaw) > 0 Then
+                WriteAmountOrFormula ws.Cells(anchor, c), aAmtRaw
+                ws.Cells(anchor, c).Interior.ColorIndex = xlNone
+            Else
+                ws.Cells(anchor, c).Value = TXT_UNCONF
+                ws.Cells(anchor, c).Interior.Color = RGB_LIGHT_YELLOW
+            End If
         End If
     Next c
 
@@ -253,9 +329,6 @@ End Sub
 ' =========================
 ' MOVE EXCLUSIONS TO BOTTOM
 ' =========================
-' Reorders the scope section so all exception/exclusion lines (light red rows)
-' sink to the bottom, just above the ADD SCOPE LINE anchor.
-' Normal scope lines keep their relative order.
 Public Sub MoveExclusionsToBottom_v10()
     Dim ws As Worksheet: Set ws = ActiveSheet
     If StrComp(ws.Name, SHEET_TEMPLATE, vbTextCompare) = 0 Then
@@ -270,7 +343,6 @@ Public Sub MoveExclusionsToBottom_v10()
     Dim scopeLast As Long: scopeLast = anchor - 1
     If scopeLast < scopeFirst Then MsgBox "No scope lines found.", vbInformation: Exit Sub
 
-    ' Collect normal and exception row indices separately
     Dim normRows() As Long, excRows() As Long
     Dim nNorm As Long, nExc As Long
     Dim r As Long
@@ -291,14 +363,12 @@ NextScopeRow:
     If nExc = 0 Then MsgBox "No exception lines found — nothing to move.", vbInformation: Exit Sub
     If nNorm = 0 Then MsgBox "All scope lines are exceptions — nothing to reorder.", vbInformation: Exit Sub
 
-    ' Check if already sorted (all exceptions already at the bottom)
     Dim alreadySorted As Boolean: alreadySorted = True
     If nNorm > 0 And nExc > 0 Then
         If normRows(nNorm) > excRows(1) Then alreadySorted = False
     End If
     If alreadySorted Then MsgBox "Exception lines are already at the bottom.", vbInformation: Exit Sub
 
-    ' Use a temp sheet to rebuild the section without row-shift corruption
     Dim wb As Workbook: Set wb = ws.Parent
     Dim tmp As Worksheet
 
@@ -315,7 +385,6 @@ NextScopeRow:
     tmp.Name = "zz_tmpScope"
     tmp.Visible = xlSheetVeryHidden
 
-    ' Copy normal rows to temp sheet first, then exception rows
     Dim destRow As Long: destRow = 1
     Dim i As Long
     For i = 1 To nNorm
@@ -331,10 +400,8 @@ NextScopeRow:
         destRow = destRow + 1
     Next i
 
-    ' Clear the scope section on the trade tab
     ws.Rows(scopeFirst & ":" & scopeLast).Clear
 
-    ' Copy back in sorted order
     Dim totalRows As Long: totalRows = nNorm + nExc
     For i = 1 To totalRows
         tmp.Rows(i).Copy
@@ -355,11 +422,9 @@ NextScopeRow:
 End Sub
 
 Private Function IsExceptionScopeLine(ByVal ws As Worksheet, ByVal r As Long) As Boolean
-    ' Primary check: light red background set by AddScopeLine
     If ws.Cells(r, COL_LINE_NO).Interior.Color = RGB_LIGHT_RED Then
         IsExceptionScopeLine = True: Exit Function
     End If
-    ' Fallback: description prefix
     Dim desc As String: desc = Trim$(CStr(ws.Cells(r, COL_DESC).Value))
     If Left$(UCase$(desc), 10) = "EXCEPTION:" Then IsExceptionScopeLine = True
 End Function
